@@ -1,0 +1,218 @@
+--[[
+    Arsenal Hitbox Menu Script (Roblox Lua) with Team Check and Respawn Fix
+    - Never modifies your own character!
+    - Restores hitboxes on respawn and when toggled off
+    - Prevents white screen / slow gun change / slow equipment bugs
+    - Place as LocalScript in StarterPlayerScripts or use your executor
+--]]
+
+repeat wait() until game:IsLoaded()
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RS = game:GetService("RunService")
+
+-- GUI SETUP
+local gui = Instance.new("ScreenGui")
+gui.Name = "ArsenalHitboxMenu"
+gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0, 240, 0, 120)
+frame.Position = UDim2.new(0.5, -120, 0.7, 0)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+frame.BorderSizePixel = 0
+
+local title = Instance.new("TextLabel", frame)
+title.Size = UDim2.new(1, 0, 0, 24)
+title.Position = UDim2.new(0, 0, 0, 0)
+title.BackgroundTransparency = 1
+title.Text = "Arsenal Hitbox"
+title.TextColor3 = Color3.new(1,1,1)
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 22
+
+local toggleBtn = Instance.new("TextButton", frame)
+toggleBtn.Size = UDim2.new(0, 210, 0, 34)
+toggleBtn.Position = UDim2.new(0, 15, 0, 32)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(50,120,60)
+toggleBtn.Text = "Hitbox: OFF"
+toggleBtn.TextColor3 = Color3.new(1,1,1)
+toggleBtn.TextSize = 20
+
+local sliderLabel = Instance.new("TextLabel", frame)
+sliderLabel.Size = UDim2.new(0, 210, 0, 18)
+sliderLabel.Position = UDim2.new(0, 15, 0, 70)
+sliderLabel.BackgroundTransparency = 1
+sliderLabel.Text = "Hitbox Size: 15"
+sliderLabel.TextColor3 = Color3.new(1,1,1)
+sliderLabel.TextSize = 16
+
+local slider = Instance.new("TextButton", frame)
+slider.Size = UDim2.new(0, 210, 0, 18)
+slider.Position = UDim2.new(0, 15, 0, 92)
+slider.BackgroundColor3 = Color3.fromRGB(80,80,80)
+slider.Text = ""
+local sliderBar = Instance.new("Frame", slider)
+sliderBar.BackgroundColor3 = Color3.fromRGB(200,50,50)
+sliderBar.Size = UDim2.new(0.25, 0, 1, 0)
+sliderBar.Position = UDim2.new(0, 0, 0, 0)
+
+-- SCRIPT VARIABLES
+local enabled = false
+local hitboxSize = 15
+local maxSize = 50
+local minSize = 3
+local lastHitboxSizes = {}
+
+-- UTILITY FUNCTIONS
+local function getTeam(player)
+    local teamValue
+    pcall(function()
+        if player:FindFirstChild("Status") and player.Status:FindFirstChild("Team") then
+            teamValue = tostring(player.Status.Team.Value)
+        elseif player.Team then
+            teamValue = tostring(player.Team)
+        end
+    end)
+    return teamValue
+end
+
+local function setHitbox(player, size)
+    if not player.Character then return end
+    -- DO NOT MODIFY LOCALPLAYER
+    if player == LocalPlayer then return end
+    local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+    local headhb = player.Character:FindFirstChild("HeadHB")
+    if hrp then
+        if not lastHitboxSizes[player] then
+            lastHitboxSizes[player] = {
+                HRP = hrp.Size,
+                HeadHB = headhb and headhb.Size or nil
+            }
+        end
+        hrp.Size = Vector3.new(size, size, size)
+        hrp.Transparency = 0.7
+        hrp.Material = Enum.Material.Neon
+        hrp.Color = Color3.fromRGB(255,50,50)
+    end
+    if headhb then
+        headhb.Size = Vector3.new(size, size, size)
+        headhb.Transparency = 0.7
+        headhb.Material = Enum.Material.Neon
+        headhb.Color = Color3.fromRGB(255,50,50)
+    end
+end
+
+local function resetHitbox(player)
+    if not player.Character then return end
+    -- DO NOT MODIFY LOCALPLAYER
+    if player == LocalPlayer then return end
+    local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+    local headhb = player.Character:FindFirstChild("HeadHB")
+    local last = lastHitboxSizes[player]
+    if hrp and last and last.HRP then
+        hrp.Size = last.HRP
+        hrp.Transparency = 1
+        hrp.Material = Enum.Material.Plastic
+        hrp.Color = Color3.fromRGB(163,162,165)
+    end
+    if headhb and last and last.HeadHB then
+        headhb.Size = last.HeadHB
+        headhb.Transparency = 1
+        headhb.Material = Enum.Material.Plastic
+        headhb.Color = Color3.fromRGB(163,162,165)
+    end
+end
+
+local function updateSliderBar()
+    local percent = (hitboxSize - minSize) / (maxSize - minSize)
+    sliderBar.Size = UDim2.new(percent, 0, 1, 0)
+end
+
+-- BUTTON LOGIC
+toggleBtn.MouseButton1Click:Connect(function()
+    enabled = not enabled
+    toggleBtn.Text = enabled and "Hitbox: ON" or "Hitbox: OFF"
+    toggleBtn.BackgroundColor3 = enabled and Color3.fromRGB(50,180,80) or Color3.fromRGB(50,120,60)
+    -- Always restore all hitboxes when disabling!
+    if not enabled then
+        for _,p in ipairs(Players:GetPlayers()) do
+            resetHitbox(p)
+        end
+    end
+end)
+
+-- SLIDER LOGIC
+local dragging = false
+slider.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true end
+end)
+slider.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+end)
+slider.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local abs = input.Position.X - slider.AbsolutePosition.X
+        local percent = math.clamp(abs/slider.AbsoluteSize.X, 0, 1)
+        hitboxSize = math.floor(minSize + (maxSize-minSize)*percent)
+        sliderLabel.Text = "Hitbox Size: "..tostring(hitboxSize)
+        updateSliderBar()
+    end
+end)
+updateSliderBar()
+
+-- MAIN UPDATE LOOP
+RS.RenderStepped:Connect(function()
+    if enabled then
+        local myTeam = getTeam(LocalPlayer)
+        for _,p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and getTeam(p) ~= myTeam then
+                setHitbox(p, hitboxSize)
+            else
+                resetHitbox(p)
+            end
+        end
+    else
+        -- On disable, restore hitboxes for all (except yourself)
+        for _,p in ipairs(Players:GetPlayers()) do
+            resetHitbox(p)
+        end
+    end
+end)
+
+-- RESTORE ON JOIN/RESPAWN/LEAVE
+Players.PlayerAdded:Connect(function(p)
+    p.CharacterAdded:Connect(function()
+        wait(1)
+        if enabled then
+            local myTeam = getTeam(LocalPlayer)
+            if getTeam(p) ~= myTeam then
+                setHitbox(p, hitboxSize)
+            else
+                resetHitbox(p)
+            end
+        else
+            resetHitbox(p)
+        end
+    end)
+end)
+Players.PlayerRemoving:Connect(function(p)
+    lastHitboxSizes[p] = nil
+end)
+LocalPlayer.CharacterAdded:Connect(function()
+    wait(1)
+    -- On respawn, always restore your own hitbox (just in case) and reset others
+    for _,p in ipairs(Players:GetPlayers()) do
+        resetHitbox(p)
+    end
+end)
+
+--[[
+Instructions:
+- Never modifies your own character's hitboxes.
+- Restores hitboxes on respawn and when toggled off.
+- Prevents white screen and slow gun/equipment switch bugs.
+- Use GUI to toggle and adjust size (min 3, max 50).
+- Only affects enemies (team check).
+]]
